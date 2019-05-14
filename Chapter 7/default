@@ -1,0 +1,69 @@
+# You may add here your
+# server {
+#	...
+# }
+# statements for each of your virtual hosts to this file
+
+##
+# You should look at the following URL's in order to grasp a solid understanding
+# of Nginx configuration files in order to fully unleash the power of Nginx.
+# http://wiki.nginx.org/Pitfalls
+# http://wiki.nginx.org/QuickStart
+# http://wiki.nginx.org/Configuration
+#
+# Generally, you will want to move this file somewhere, and start with a clean
+# file but keep this around for reference. Or just disable in sites-enabled.
+#
+# Please see /usr/share/doc/nginx-doc/examples/ for more detailed examples.
+##
+
+lua_package_path "/home/metl/lua-resty-mysql-master/lib/?.lua;;";
+init_by_lua 'mysql = require "resty.mysql"';
+
+server {
+	listen 80 default_server;
+	listen [::]:80 default_server ipv6only=on;
+
+	root /usr/share/nginx/html;
+	index index.html index.htm;
+
+	# Make site accessible from http://localhost/
+	server_name localhost;
+		
+	location / {
+		 default_type 'text/plain';
+            content_by_lua 'local db, err = mysql:new()
+                db:set_timeout(1000) 
+                local ok, err, errno, sqlstate = db:connect{
+                    host = "192.168.2.111",
+                    port = 3306,
+                    database = "test1",
+                    user = "newuser",
+                    password = "newuser",
+                    max_packet_size = 1024 * 1024 }
+
+
+                if not ok then
+                     ngx.exec("@inline_concat")
+                end
+
+                local res, err, errno, sqlstate = db:query("select * from seo_redirect_location where location=\'"..ngx.var.uri.."\'  order by id asc", 10)
+                if next(res) then
+                   return ngx.redirect(res[1].REDIRECT_LOCATION,res[1].STATUS)                  
+                end
+		ngx.exec("@inline_concat")
+		';
+        }
+
+	location @inline_concat {
+            # MIME type determined by default_type:
+            default_type 'text/plain';
+            set $a "hello";
+            set $b "world";
+            # inline Lua script
+            set_by_lua $res "return ngx.arg[1]..ngx.arg[2]..ngx.var.uri" $a $b;
+            return 200 $res;
+        }
+
+	
+}
